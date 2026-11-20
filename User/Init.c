@@ -41,10 +41,11 @@ void BlueToothInit(void)
 	USART1->CR1|=(1<<13);
 }
 
-void GY86Init(void)
+void GY87Init(void)
 {
 	I2C1_Init();
 	MPU6050_Init();
+	HMC5883L_Init();
 }
 
 void MotorInit(void)
@@ -185,25 +186,51 @@ void ReceiverInit(void)
     /*使能捕获/比较1中断(CC1IE)*/
     TIM2->DIER|=TIM_DIER_CC1IE;
 
-    /*配置 NVIC: 抢占优先级0, 子优先级1
+    /*配置 NVIC: 抢占优先级1, 子优先级0
      *    首先设置优先级分组为2 (2位抢占, 2位子优先级)
      *    TIM2_IRQn = 28
      */
     SCB->AIRCR=(0x5FAUL<<16)|(5UL<<8);//分组2: 抢占2位 [7:6], 子优先级2位 [5:4]
 
-    /*优先级的实际值: (抢占0 << 6) | (子1 << 4) = 0x10, 直接写入IP寄存器 */
-    NVIC->IP[28]=(0UL<<6)|(1UL<<4);// 抢占0, 子优先级1
+    /*TIM2中断调用内核API，优先级0x40可被内核的BASEPRI=0x40屏蔽。 */
+    NVIC->IP[28]=0x40;                     //抢占1, 子优先级0，先于同组的TIM3服务
     NVIC->ISER[0]=(1UL<<28);               //使能TIM2中断
 
     /*启动定时器*/
     TIM2->CR1|=TIM_CR1_CEN;
 }
 
+void GY87TimerStart(void)
+{
+    const uint32_t irq_mask=1UL<<(uint32_t)TIM3_IRQn;
+
+    RCC->APB1ENR|=RCC_APB1ENR_TIM3EN;
+    (void)RCC->APB1ENR;
+    NVIC->ICER[0]=irq_mask;
+    TIM3->DIER=0;
+    TIM3->CR1=TIM_CR1_URS;
+    TIM3->CR2=0;
+    TIM3->SMCR=0;
+    TIM3->PSC=83;
+    TIM3->ARR=9999;
+    TIM3->EGR=TIM_EGR_UG;
+    TIM3->SR=0;
+
+    NVIC->IP[TIM3_IRQn]=0x50;
+    NVIC->ICPR[0]=irq_mask;
+    TIM3->DIER=TIM_DIER_UIE;
+    NVIC->ISER[0]=irq_mask;
+    TIM3->CR1|=TIM_CR1_CEN;
+}
+
 void BSP(void)
 {
 	ClockInit();
 	BlueToothInit();
-	GY86Init();
+#if UseTheHostComputerToVerifyAttitudeCalculation==1
+	HostComputerInit();
+#endif
+	GY87Init();
 	MotorInit();
 	ReceiverInit();
 	
@@ -252,10 +279,12 @@ void I2C1_Init(void)
 
 void MPU6050_Init(void)
 {
+	uint8_t value;
+	
 	/*唤醒MPU6050&时钟源
 	 */
 	I2C_Start();
-	I2C_Send_Addr(0xD0,0);		//发送设备地址,写模式
+	I2C_Send_Addr(0x68,0);		//发送设备地址,写模式
 	I2C_Send_Byte(0x6B);		//发送寄存器地址
 	I2C_Send_Byte(0x01);		//发送寄存器值
 	I2C_Stop();
@@ -263,7 +292,7 @@ void MPU6050_Init(void)
 	/*配置陀螺仪量程
 	 */
 	I2C_Start();
-	I2C_Send_Addr(0xD0,0);		//发送设备地址,写模式
+	I2C_Send_Addr(0x68,0);		//发送设备地址,写模式
 	I2C_Send_Byte(0x1B);
 	I2C_Send_Byte(0x00);
 	I2C_Stop();
@@ -271,8 +300,65 @@ void MPU6050_Init(void)
 	/*配置加速度计量程
 	 */
 	I2C_Start();
-	I2C_Send_Addr(0xD0,0);		//发送设备地址,写模式
+	I2C_Send_Addr(0x68,0);		//发送设备地址,写模式
 	I2C_Send_Byte(0x1C);
+	I2C_Send_Byte(0x00);
+	I2C_Stop();
+	
+	/*开启旁路模式，以支持读取HMC5883L的数据
+	 */
+	//清零I2C_MST_EN
+	if(!I2C_Read_Registers(0x68,0x6A,&value,1))
+	{
+		ErrorHandle();
+	}
+	value&=~0x20;
+	I2C_Start();
+	I2C_Send_Addr(0x68,0);		//发送设备地址,写模式
+	I2C_Send_Byte(0x6A);
+	I2C_Send_Byte(value);
+	I2C_Stop();
+	
+	//使能I2C_BYPASS_EN
+	if(!I2C_Read_Registers(0x68,0x37,&value,1))
+	{
+		ErrorHandle();
+	}
+	value|=0x02;
+	I2C_Start();
+	I2C_Send_Addr(0x68,0);		//发送设备地址,写模式
+	I2C_Send_Byte(0x37);
+	I2C_Send_Byte(value);
+	I2C_Stop();
+}
+
+void HMC5883L_Init(void)
+{
+	uint8_t buf[3];
+	
+	if(!I2C_Read_Registers(0x1E,0x0A,buf,3))
+	{
+		ErrorHandle();
+	}
+	if(buf[0]!=0x48||buf[1]!=0x34||buf[2]!=0x33)
+	{
+		ErrorHandle();
+	}
+	I2C_Start();
+	I2C_Send_Addr(0x1E,0);		//发送设备地址,写模式
+	I2C_Send_Byte(0x00);
+	I2C_Send_Byte(0x70);
+	I2C_Stop();
+	
+	I2C_Start();
+	I2C_Send_Addr(0x1E,0);		//发送设备地址,写模式
+	I2C_Send_Byte(0x01);
+	I2C_Send_Byte(0x20);
+	I2C_Stop();
+	
+	I2C_Start();
+	I2C_Send_Addr(0x1E,0);		//发送设备地址,写模式
+	I2C_Send_Byte(0x02);
 	I2C_Send_Byte(0x00);
 	I2C_Stop();
 }
