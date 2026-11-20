@@ -223,16 +223,33 @@ void GY87TimerStart(void)
     TIM3->CR1|=TIM_CR1_CEN;
 }
 
+void ErrorLEDInit(void)
+{
+	//注意：GPIOA时钟已经在ClockInit()中开启，此处不再额外操作
+	
+	//通用输出模式
+	GPIOA->MODER&=~0x00000C00;
+	GPIOA->MODER|=0x00000400;
+	
+	//推挽输出
+	GPIOA->OTYPER&=~0x00000020;
+	
+	//输出速度:快速50MHz
+	GPIOA->OSPEEDR&=~0x00000C00;
+	GPIOA->OSPEEDR|=0x00000800;
+	
+	//无上拉/下拉
+	GPIOA->PUPDR&=~0x00000C00;
+}
+
 void BSP(void)
 {
 	ClockInit();
+	ErrorLEDInit();
 	BlueToothInit();
 #if UseTheHostComputerToVerifyAttitudeCalculation==1
 	HostComputerInit();
 #endif
-	GY87Init();
-	MotorInit();
-	ReceiverInit();
 	
 	//使能DWT周期计数器（用于SystemView时间戳）
 	//使能内核调试跟踪单元（解锁DWT）
@@ -241,6 +258,10 @@ void BSP(void)
 	DWT->CYCCNT = 0;
 	//使能CYCCNT开始计数
 	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+	
+	GY87Init();		//该函数内部就可能触发ErrorHandle()函数，所以DWT必须在该函数之前初始化
+	MotorInit();
+	ReceiverInit();
 }
 
 void I2C1_Init(void)
@@ -279,6 +300,7 @@ void I2C1_Init(void)
 
 void MPU6050_Init(void)
 {
+	ErrorType errtype;
 	uint8_t value;
 	
 	/*唤醒MPU6050&时钟源
@@ -310,7 +332,8 @@ void MPU6050_Init(void)
 	//清零I2C_MST_EN
 	if(!I2C_Read_Registers(0x68,0x6A,&value,1))
 	{
-		ErrorHandle();
+		errtype=ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_I2C_MST_EN;
+		ErrorHandle(errtype);
 	}
 	value&=~0x20;
 	I2C_Start();
@@ -322,7 +345,8 @@ void MPU6050_Init(void)
 	//使能I2C_BYPASS_EN
 	if(!I2C_Read_Registers(0x68,0x37,&value,1))
 	{
-		ErrorHandle();
+		errtype=ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_I2C_BYPASS_EN;
+		ErrorHandle(errtype);
 	}
 	value|=0x02;
 	I2C_Start();
@@ -334,15 +358,18 @@ void MPU6050_Init(void)
 
 void HMC5883L_Init(void)
 {
+	ErrorType errtype;
 	uint8_t buf[3];
 	
 	if(!I2C_Read_Registers(0x1E,0x0A,buf,3))
 	{
-		ErrorHandle();
+		errtype=ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_IDENTIFICATION_REGISTERS;
+		ErrorHandle(errtype);
 	}
 	if(buf[0]!=0x48||buf[1]!=0x34||buf[2]!=0x33)
 	{
-		ErrorHandle();
+		errtype=ERR_IDENTIFICATION_REGISTERS_VALUE_NOT_EQUAL_H43_IN_HMC5883L;
+		ErrorHandle(errtype);
 	}
 	I2C_Start();
 	I2C_Send_Addr(0x1E,0);		//发送设备地址,写模式

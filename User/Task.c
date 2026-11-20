@@ -83,6 +83,7 @@ void GY87Task(void *p_arg)
 	(void)p_arg;
 	INT8U err;
 	
+	ErrorType errtype;
 	uint8_t firstexec=1;
 	uint8_t frames_since_send=0;
 	RawSensorFrame gy87_raw_sensorframe;
@@ -193,7 +194,8 @@ void GY87Task(void *p_arg)
 				gy87_quaternion.z=gy87_quaternion.z+dq_w.z;
 				if(!NormQuaternion(&gy87_quaternion,&gy87_quaternion))
 				{
-					ErrorHandle();
+					errtype=ERR_NEW_QUATERNION_NORM_EQUAL_0_WHEN_ACCEL_NORM_EQUAL_0;
+					ErrorHandle(errtype);
 				}
 				MatrixOfQuaternion(&gy87_quaternion,gy87_RotationMatrix);
 				Transpose(gy87_RotationMatrix,transposed_q);
@@ -274,7 +276,8 @@ void GY87Task(void *p_arg)
 			dq.z=gy87_quaternion.z+dq.z;
 			if(!NormQuaternion(&dq,&gy87_quaternion))
 			{
-				ErrorHandle();
+				errtype=ERR_NEW_QUATERNION_NORM_EQUAL_0;
+				ErrorHandle(errtype);
 			}
 			MatrixOfQuaternion(&gy87_quaternion,gy87_RotationMatrix);
 			Transpose(gy87_RotationMatrix,transposed_q);

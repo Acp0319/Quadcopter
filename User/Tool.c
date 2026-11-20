@@ -171,11 +171,13 @@ fail:
 
 void Read_MPU6050_Gyro_Values(int16_t* x,int16_t* y,int16_t* z)
 {
+	ErrorType errtype;
 	uint8_t tmp[6];
 	
 	if(!I2C_Read_Registers(0x68,0x43,tmp,6))
 	{
-		ErrorHandle();
+		errtype=ERR_IIC_READ_REGISTERS_FAILED_IN_GYRO;
+		ErrorHandle(errtype);
 	}
 	
 	*x=(int16_t)((tmp[0]<<8)|tmp[1]);
@@ -185,11 +187,13 @@ void Read_MPU6050_Gyro_Values(int16_t* x,int16_t* y,int16_t* z)
 
 void Read_MPU6050_Accel_Values(int16_t* x,int16_t* y,int16_t* z)
 {
+	ErrorType errtype;
 	uint8_t tmp[6];
 	
 	if(!I2C_Read_Registers(0x68,0x3B,tmp,6))
 	{
-		ErrorHandle();
+		errtype=ERR_IIC_READ_REGISTERS_FAILED_IN_ACCEL;
+		ErrorHandle(errtype);
 	}
 	
 	*x=(int16_t)((tmp[0]<<8)|tmp[1]);
@@ -199,12 +203,14 @@ void Read_MPU6050_Accel_Values(int16_t* x,int16_t* y,int16_t* z)
 
 uint8_t Read_HMC5883L_Values(int16_t* x,int16_t* y,int16_t* z)
 {
+	ErrorType errtype;
 	uint8_t tmp[6];
 	uint8_t result;
 	
 	if(!I2C_Read_Registers(0x1E,0x09,&result,1))
 	{
-		ErrorHandle();
+		errtype=ERR_IIC_READ_REGISTERS_FAILED_IN_MAG_DATA_REFRESH_FLAG;
+		ErrorHandle(errtype);
 	}
 	if(!(result&0x01))
 	{
@@ -212,7 +218,8 @@ uint8_t Read_HMC5883L_Values(int16_t* x,int16_t* y,int16_t* z)
 	}
 	if(!I2C_Read_Registers(0x1E,0x03,tmp,6))
 	{
-		ErrorHandle();
+		errtype=ERR_IIC_READ_REGISTERS_FAILED_IN_MAG;
+		ErrorHandle(errtype);
 	}
 	
 	*x=(int16_t)((tmp[0]<<8)|tmp[1]);
@@ -221,10 +228,27 @@ uint8_t Read_HMC5883L_Values(int16_t* x,int16_t* y,int16_t* z)
 	return 0x01;
 }
 
-void Delay(uint32_t time)
+void Delay_us(uint32_t time)
 {
-	int i=time;
-	while(i--);
+	uint32_t step=time*84;
+	uint32_t start=DWT->CYCCNT;
+	while((DWT->CYCCNT-start)<step) ;
+}
+
+void Delay_ms(uint32_t time)
+{
+	while(time--)
+	{
+		Delay_us(1000);
+	}
+}
+
+void Delay_s(uint32_t time)
+{
+	while(time--)
+	{
+		Delay_ms(1000);
+	}
 }
 
 uint32_t Serial_Pow(uint32_t x,uint32_t y)
@@ -403,10 +427,77 @@ void AssertThrottle(uint16_t* throttle)
 #endif
 }
 
-void ErrorHandle(void)
+void ErrorHandle(ErrorType errtype)
 {
-	//当前暂时不添加具体处理，后续再完善
-	while(1) ;
+	switch(errtype)
+	{
+		case ERR_NEW_QUATERNION_NORM_EQUAL_0_WHEN_ACCEL_NORM_EQUAL_0:
+			ErrorLED(ERR_NEW_QUATERNION_NORM_EQUAL_0_WHEN_ACCEL_NORM_EQUAL_0);
+			break;
+		case ERR_NEW_QUATERNION_NORM_EQUAL_0:
+			ErrorLED(ERR_NEW_QUATERNION_NORM_EQUAL_0);
+			break;
+		case ERR_ACCEL_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION:
+			ErrorLED(ERR_ACCEL_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION);
+			break;
+		case ERR_M_LEV_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION:
+			ErrorLED(ERR_M_LEV_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION);
+			break;
+		case ERR_W_B_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION:
+			ErrorLED(ERR_W_B_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION);
+			break;
+		case ERR_DEFAULT_WHEN_SWITCH:
+			ErrorLED(ERR_DEFAULT_WHEN_SWITCH);
+			break;
+		case ERR_INITIALIZED_QUATERNION_NORM_EQUAL_0:
+			ErrorLED(ERR_INITIALIZED_QUATERNION_NORM_EQUAL_0);
+			break;
+		case ERR_IIC_READ_REGISTERS_FAILED_IN_GYRO:
+			ErrorLED(ERR_IIC_READ_REGISTERS_FAILED_IN_GYRO);
+			break;
+		case ERR_IIC_READ_REGISTERS_FAILED_IN_ACCEL:
+			ErrorLED(ERR_IIC_READ_REGISTERS_FAILED_IN_ACCEL);
+			break;
+		case ERR_IIC_READ_REGISTERS_FAILED_IN_MAG_DATA_REFRESH_FLAG:
+			ErrorLED(ERR_IIC_READ_REGISTERS_FAILED_IN_MAG_DATA_REFRESH_FLAG);
+			break;
+		case ERR_IIC_READ_REGISTERS_FAILED_IN_MAG:
+			ErrorLED(ERR_IIC_READ_REGISTERS_FAILED_IN_MAG);
+			break;
+		case ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_I2C_MST_EN:
+			ErrorLED(ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_I2C_MST_EN);
+			break;
+		case ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_I2C_BYPASS_EN:
+			ErrorLED(ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_I2C_BYPASS_EN);
+			break;
+		case ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_IDENTIFICATION_REGISTERS:
+			ErrorLED(ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_IDENTIFICATION_REGISTERS);
+			break;
+		case ERR_IDENTIFICATION_REGISTERS_VALUE_NOT_EQUAL_H43_IN_HMC5883L:
+			ErrorLED(ERR_IDENTIFICATION_REGISTERS_VALUE_NOT_EQUAL_H43_IN_HMC5883L);
+			break;
+		default:
+			ErrorLED(ERR_NOT_DEFINED);
+			break;
+	}
+}
+
+void ErrorLED(ErrorType errtype)
+{
+	uint8_t num;
+	num=errtype+1;
+	while(1)
+	{
+		for(int i=0;i<num;i++)
+		{
+			GPIOA->ODR|=0x00000020;		//亮
+			Delay_ms(500);
+			GPIOA->ODR&=~0x00000020;	//灭
+			Delay_ms(500);
+		}
+		GPIOA->ODR&=~0x00000020;		//灭
+		Delay_s(3);
+	}
 }
 
 void Cal_3_3_plus_3_1(float A[3][3],float b[3],float result[3])
@@ -487,13 +578,15 @@ void RawToFRD(SensorFrame* raw,SensorFrame* result)
 
 void InitializeQuaternion(Quaternion* q,SensorFrame data)
 {
+	ErrorType errtype;
 	float u_b[3],m_lev[3],n_b[3],w_b[3],C[4];	//"_b"代表是机体系下的坐标
 	float R[3][3];
 	uint8_t index=0;
 	Quaternion tmp;
 	if(!NormVector(data.accel,u_b))
 	{
-		ErrorHandle();
+		errtype=ERR_ACCEL_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION;
+		ErrorHandle(errtype);
 	}
 	float m_u_b=0.0f;
 	m_u_b=VectorDotProduct(data.mag,u_b);
@@ -503,12 +596,14 @@ void InitializeQuaternion(Quaternion* q,SensorFrame data)
 	}
 	if(!NormVector(m_lev,n_b))
 	{
-		ErrorHandle();
+		errtype=ERR_M_LEV_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION;
+		ErrorHandle(errtype);
 	}
 	VectorCrossProduct(u_b,n_b,w_b);
 	if(!NormVector(w_b,w_b))
 	{
-		ErrorHandle();
+		errtype=ERR_W_B_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION;
+		ErrorHandle(errtype);
 	}
 	VectorCrossProduct(w_b,u_b,n_b);
 	for(int i=0;i<3;i++)
@@ -555,12 +650,14 @@ void InitializeQuaternion(Quaternion* q,SensorFrame data)
 			tmp.y=(R[1][2]+R[2][1])/(4.0f*tmp.z);
 			break;
 		default:
-			ErrorHandle();
+			errtype=ERR_DEFAULT_WHEN_SWITCH;
+			ErrorHandle(errtype);
 			break;
 	}
 	if(!NormQuaternion(&tmp,q))
 	{
-		ErrorHandle();
+		errtype=ERR_INITIALIZED_QUATERNION_NORM_EQUAL_0;
+		ErrorHandle(errtype);
 	}
 }
 

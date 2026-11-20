@@ -40,6 +40,30 @@ typedef struct
 	float yaw;
 } EulerAngles;
 
+//错误类型定义
+typedef enum
+{
+	ERR_NEW_QUATERNION_NORM_EQUAL_0_WHEN_ACCEL_NORM_EQUAL_0,			//GY87Task,当加速度计数据无效时，仅使用陀螺仪数据更新四元数，但更新后新四元数的模长为0
+	ERR_NEW_QUATERNION_NORM_EQUAL_0,									//GY87Task,新的四元数的模长为0
+	ERR_ACCEL_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION,					//GY87Task->InitializeQuaternion(),初始化四元数时，加速度计数据无效
+	ERR_M_LEV_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION,					//GY87Task->InitializeQuaternion(),初始化四元数时，磁力计数据水平分量为0
+	ERR_W_B_NORM_EQUAL_0_WHEN_INITIALIZE_QUATERNION,					//GY87Task->InitializeQuaternion(),初始化四元数时，w_b模长为0，无法确定参考系
+	ERR_DEFAULT_WHEN_SWITCH,											//GY87Task->InitializeQuaternion(),初始化四元数时，switch()进入default分支
+	ERR_INITIALIZED_QUATERNION_NORM_EQUAL_0,							//GY87Task->InitializeQuaternion(),初始化四元数时，初始化的四元数模长为0
+	ERR_IIC_READ_REGISTERS_FAILED_IN_GYRO,								//GY87Task->Read_MPU6050_Gyro_Values,通过IIC读取陀螺仪数据时失败
+	ERR_IIC_READ_REGISTERS_FAILED_IN_ACCEL,								//GY87Task->Read_MPU6050_Accel_Values,通过IIC读取加速度计数据时失败
+	ERR_IIC_READ_REGISTERS_FAILED_IN_MAG_DATA_REFRESH_FLAG,				//GY87Task->Read_HMC5883L_Values,通过IIC读取磁力计数据更新标志时失败
+	ERR_IIC_READ_REGISTERS_FAILED_IN_MAG,								//GY87Task->Read_HMC5883L_Values,通过IIC读取磁力计数据时失败
+	ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_I2C_MST_EN,					//BSP()->GY87Init()->MPU6050_Init(),通过IIC读取I2C_MST_EN时失败
+	ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_I2C_BYPASS_EN,				//BSP()->GY87Init()->MPU6050_Init(),通过IIC读取I2C_BYPASS_EN时失败
+	ERR_IIC_READ_REGISTERS_FAILED_WHEN_READ_IDENTIFICATION_REGISTERS,	//BSP()->GY87Init()->HMC5883L_Init(),通过IIC读取HMC5883L的识别寄存器时失败
+	ERR_IDENTIFICATION_REGISTERS_VALUE_NOT_EQUAL_H43_IN_HMC5883L,		//BSP()->GY87Init()->HMC5883L_Init(),读取到HMC5883L的识别寄存器的值不是"H43"
+	
+	//Add here
+	
+	ERR_NOT_DEFINED														//ErrorHandle(),处理错误时遇到未知错误，进入了default分支
+} ErrorType;
+
 /*以下为与I2C相关的工具函数*/
 void I2C_Start(void);							//发送起始位
 void I2C_Stop(void);							//发送停止位
@@ -76,7 +100,9 @@ uint8_t Read_HMC5883L_Values(int16_t* x,int16_t* y,int16_t* z);				/*读取HMC58
 																			 */
 
 /*以下为与延时函数相关的工具函数*/
-void Delay(uint32_t time);
+void Delay_us(uint32_t time);
+void Delay_ms(uint32_t time);
+void Delay_s(uint32_t time);
 
 /*以下为与蓝牙发送相关的工具函数*/
 uint32_t Serial_Pow(uint32_t x,uint32_t y);					//计算x^y
@@ -97,7 +123,10 @@ void ESCSetThrottle(uint16_t PA8throttle,uint16_t PA9throttle,uint16_t PA10throt
 void AssertThrottle(uint16_t* throttle);
 
 /*以下为错误处理函数*/
-void ErrorHandle(void);
+void ErrorHandle(ErrorType errtype);
+void ErrorLED(ErrorType errtype);		/*LED按照错误的类型相应地闪烁
+										 *LED先(亮0.5s->灭0.5s)*(errtype+1)次，然后灭3s，如此循环
+										 */
 
 /*以下为与矩阵运算相关的函数*/
 void Cal_3_3_plus_3_1(float A[3][3],float b[3],float result[3]);			/*计算3*3矩阵与3*1矩阵的乘积

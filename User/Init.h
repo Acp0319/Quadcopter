@@ -18,6 +18,7 @@ void ReceiverInit(void);	//初始化PA0作为接收机信号引脚，初始化TI
 //							 *并且设置了TIM2_IRQn优先级为抢占1,子优先级0
 //							 */
 void GY87TimerStart(void);	//初始化TIM3，作为GY87数据采集的频率控制
+void ErrorLEDInit(void);	//初始化报告故障的LED灯，该灯是开发板上自带的LD2，由PA5控制
 
 void I2C1_Init(void);
 void MPU6050_Init(void);
